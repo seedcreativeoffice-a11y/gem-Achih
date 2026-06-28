@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gem 設計闖關 ─ 阿智陪你做一個小幫手</title>
+<style>
+  :root{
+    --ink:#1d2733;          /* 主文字 深墨 */
+    --ink-soft:#5a6b7a;     /* 次文字 */
+    --paper:#f3f0e9;        /* 紙感底 */
+    --card:#ffffff;
+    --line:#e2ddd2;
+    --teal:#0f8a7e;         /* 主色 護理綠松 */
+    --teal-deep:#0a5f57;
+    --teal-wash:#e6f3f1;
+    --amber:#c98a1e;        /* 規則 */
+    --amber-wash:#f8efdc;
+    --rose:#c0556a;         /* 提醒/答錯 */
+    --rose-wash:#f7e6ea;
+    --blue:#2f6fb0;         /* 概念 */
+    --blue-wash:#e6eff8;
+    --gold:#b88a2a;         /* 完成金 */
+    --lock:#aab4be;
+    --shadow:0 6px 24px rgba(20,40,50,.10);
+    --radius:16px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #eef6f4 0%, transparent 60%),
+      var(--paper);
+    color:var(--ink);
+    line-height:1.7;
+    -webkit-font-smoothing:antialiased;
+    padding:20px 16px 60px;
+  }
+  .wrap{max-width:1020px;margin:0 auto}
+
+  /* ── 頂部進度 / 關卡地圖 ── */
+  .topbar{
+    display:flex;align-items:center;gap:14px;
+    margin-bottom:22px;flex-wrap:wrap;
+  }
+  .brand{
+    font-weight:800;letter-spacing:.5px;font-size:18px;color:var(--teal-deep);
+    display:flex;align-items:center;gap:8px;
+  }
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 4px var(--teal-wash)}
+  .muteBtn{
+    margin-left:auto;border:1px solid var(--line);background:var(--card);
+    border-radius:30px;padding:6px 14px;font-size:13px;color:var(--ink-soft);cursor:pointer;
+  }
+  .muteBtn:hover{border-color:var(--teal)}
+
+  .map{
+    display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+    background:var(--card);border:1px solid var(--line);border-radius:40px;
+    padding:8px 14px;box-shadow:var(--shadow);margin-bottom:24px;
+  }
+  .node{
+    display:flex;align-items:center;gap:7px;padding:4px 6px;border-radius:30px;
+    font-size:13px;color:var(--lock);white-space:nowrap;
+  }
+  .node .pip{
+    width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+    font-size:12px;font-weight:700;background:#eceae3;color:var(--lock);
+    border:2px solid transparent;transition:.3s;
+  }
+  .node.done{color:var(--teal-deep)}
+  .node.done .pip{background:var(--teal);color:#fff}
+  .node.active{color:var(--ink);font-weight:700}
+  .node.active .pip{background:#fff;color:var(--teal-deep);border-color:var(--teal);box-shadow:0 0 0 4px var(--teal-wash)}
+  .node.locked .pip{background:#eceae3}
+  .node .arr{color:var(--line);font-size:12px}
+  .node.bonus.locked{opacity:.7}
+  .node.bonus .pip{background:#f1ecdd;color:var(--gold)}
+
+  /* ── 主版面：內容 + 阿智欄 ── */
+  .stage{display:grid;grid-template-columns:1fr 280px;gap:22px;align-items:start}
+  @media(max-width:780px){.stage{grid-template-columns:1fr}}
+
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:30px 30px 28px;
+    animation:rise .45s cubic-bezier(.2,.8,.2,1);
+  }
+  @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  @media(max-width:520px){.card{padding:22px 20px}}
+
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;
+    font-size:12px;font-weight:700;letter-spacing:1.5px;
+    color:var(--teal-deep);text-transform:uppercase;margin-bottom:12px;
+  }
+  .eyebrow .lv{background:var(--teal);color:#fff;border-radius:6px;padding:2px 8px;letter-spacing:1px}
+  .eyebrow-intro{background:none;padding:0;color:var(--teal-deep)}
+  h1{font-size:30px;line-height:1.35;letter-spacing:.5px;margin-bottom:8px}
+  h2{font-size:23px;line-height:1.4;letter-spacing:.4px;margin-bottom:14px}
+  h1.hero{font-size:29px;line-height:1.45;letter-spacing:.5px;margin-bottom:12px;word-break:keep-all}
+  @media(max-width:520px){h1.hero{font-size:25px;line-height:1.5}}
+  p.lead{color:var(--ink-soft);font-size:16px;margin-bottom:18px}
+  .hint{color:var(--ink-soft);font-size:14px}
+
+  /* 任務簡報框 */
+  .brief{
+    background:var(--teal-wash);border-left:4px solid var(--teal);
+    border-radius:0 12px 12px 0;padding:16px 18px;margin:18px 0 22px;font-size:15px;
+  }
+  .brief b{color:var(--teal-deep)}
+  .brief-t{font-weight:800;color:var(--teal-deep);font-size:15px;margin-bottom:10px}
+  .brief-list{list-style:none;counter-reset:bf;display:flex;flex-direction:column;gap:9px}
+  .brief-list li{
+    counter-increment:bf;position:relative;padding-left:30px;line-height:1.55;color:var(--ink);
+  }
+  .brief-list li:before{
+    content:counter(bf);position:absolute;left:0;top:1px;
+    width:21px;height:21px;border-radius:50%;background:var(--teal);color:#fff;
+    font-size:12px;font-weight:700;display:grid;place-items:center;
+  }
+
+  /* 選項 */
+  .opts{display:flex;flex-direction:column;gap:12px;margin:8px 0 6px}
+  .grp{font-size:12px;font-weight:700;letter-spacing:1px;color:var(--ink-soft);
+       margin:18px 0 2px;padding-bottom:5px;border-bottom:1px solid var(--line)}
+  .grp:first-of-type{margin-top:4px}
+  .opt{
+    text-align:left;border:2px solid var(--line);background:#fcfbf8;
+    border-radius:12px;padding:14px 16px;font-size:15.5px;color:var(--ink);
+    cursor:pointer;transition:.18s;display:flex;gap:12px;align-items:flex-start;font-family:inherit;
+  }
+  .opt:hover{border-color:var(--teal);background:var(--teal-wash)}
+  .opt .tick{
+    flex:0 0 22px;height:22px;border-radius:6px;border:2px solid var(--line);
+    margin-top:1px;display:grid;place-items:center;font-size:13px;color:transparent;transition:.18s;
+  }
+  .opt.sel{border-color:var(--teal);background:var(--teal-wash)}
+  .opt.sel .tick{background:var(--teal);border-color:var(--teal);color:#fff}
+  .opt.correct{border-color:var(--teal);background:var(--teal-wash)}
+  .opt.correct .tick{background:var(--teal);border-color:var(--teal);color:#fff}
+  .opt.wrong{border-color:var(--rose);background:var(--rose-wash)}
+  .opt.wrong .tick{background:var(--rose);border-color:var(--rose);color:#fff}
+  .opt.disabled{pointer-events:none;opacity:.92}
+
+  .tag{font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;margin-left:auto;white-space:nowrap}
+  .tag.role{background:var(--blue-wash);color:var(--blue)}
+  .tag.task{background:var(--teal-wash);color:var(--teal-deep)}
+  .tag.rule{background:var(--amber-wash);color:var(--amber)}
+  .tag.fmt{background:var(--rose-wash);color:var(--rose)}
+
+  /* 回饋框 */
+  .feed{
+    margin-top:18px;border-radius:12px;padding:14px 16px;font-size:15px;
+    animation:rise .35s;display:none;
+  }
+  .feed.show{display:block}
+  .feed.ok{background:var(--teal-wash);border-left:4px solid var(--teal)}
+  .feed.no{background:var(--rose-wash);border-left:4px solid var(--rose)}
+  .feed b{display:block;margin-bottom:3px}
+  .feed.ok b{color:var(--teal-deep)}
+  .feed.no b{color:var(--rose)}
+
+  /* 修復型關卡：壞提示詞 */
+  .badprompt{
+    background:#2a2f36;color:#e8e6df;border-radius:12px;padding:16px 18px;
+    font-size:14.5px;line-height:1.75;margin:14px 0 20px;font-family:"SFMono-Regular",ui-monospace,monospace;
+    position:relative;
+  }
+  .badprompt .lbl{
+    position:absolute;top:-10px;left:14px;background:var(--rose);color:#fff;
+    font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px;letter-spacing:.5px;
+    font-family:"PingFang TC",sans-serif;
+  }
+  .badprompt .gap{color:#ffb4c0;font-style:italic}
+
+  /* 填空 builder */
+  .field{margin-bottom:16px}
+  .field label{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:6px}
+  .field label .c{width:9px;height:9px;border-radius:50%}
+  .field textarea{
+    width:100%;border:2px solid var(--line);border-radius:10px;padding:11px 13px;
+    font-size:15px;font-family:inherit;color:var(--ink);resize:vertical;min-height:54px;line-height:1.6;background:#fcfbf8;
+  }
+  .field textarea:focus{outline:none;border-color:var(--teal);background:#fff}
+
+  .result{
+    background:var(--teal-wash);border-left:4px solid var(--teal);border-radius:0 12px 12px 0;
+    padding:16px 18px;margin-top:8px;font-size:14.5px;white-space:pre-wrap;line-height:1.8;
+    color:var(--ink);min-height:40px;
+  }
+  .result .ph{color:var(--ink-soft);font-style:italic}
+
+  /* 按鈕 */
+  .row{display:flex;gap:12px;flex-wrap:wrap;margin-top:22px}
+  .btn{
+    border:none;border-radius:30px;padding:13px 26px;font-size:16px;font-weight:700;
+    cursor:pointer;font-family:inherit;transition:.18s;display:inline-flex;align-items:center;gap:8px;
+  }
+  .btn.primary{background:var(--teal);color:#fff;box-shadow:0 4px 14px rgba(15,138,126,.32)}
+  .btn.primary:hover{background:var(--teal-deep);transform:translateY(-1px)}
+  .btn.ghost{background:#fff;color:var(--teal-deep);border:2px solid var(--teal)}
+  .btn.ghost:hover{background:var(--teal-wash)}
+  .btn.gold{background:linear-gradient(135deg,#caa23e,#a8771c);color:#fff;box-shadow:0 4px 14px rgba(168,119,28,.35)}
+  .btn.gold:hover{transform:translateY(-1px)}
+  .btn.back{background:transparent;color:var(--ink-soft);border:2px solid var(--line);padding:13px 22px}
+  .btn.back:hover{border-color:var(--teal);color:var(--teal-deep)}
+  .btn.copied{background:var(--teal-deep)!important}
+  .btn:disabled{background:#dfe3e1;color:#9aa4a2;box-shadow:none;cursor:not-allowed;transform:none}
+
+  /* 阿智角色欄 */
+  .buddy{position:sticky;top:16px}
+  .buddy .panel{
+    background:linear-gradient(170deg,#ffffff,#f4f8f6);
+    border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);
+    padding:18px 16px 16px;text-align:center;
+  }
+  .buddy svg{width:120px;height:120px;display:block;margin:0 auto 4px}
+  .buddy .name{font-weight:800;color:var(--teal-deep);font-size:15px;letter-spacing:.5px;margin-bottom:10px}
+  .buddy .role{font-size:12px;color:var(--ink-soft);margin-bottom:10px}
+  .bubble{
+    background:var(--ink);color:#fff;border-radius:14px;padding:11px 13px;font-size:13.5px;
+    line-height:1.6;text-align:left;position:relative;animation:rise .35s;
+  }
+  .bubble:after{
+    content:"";position:absolute;top:-7px;left:24px;border:7px solid transparent;
+    border-top:0;border-bottom-color:var(--ink);
+  }
+  @media(max-width:780px){
+    .buddy{position:static;margin-top:4px}
+    .buddy .panel{display:flex;align-items:center;gap:14px;text-align:left}
+    .buddy svg{width:74px;height:74px;margin:0;flex:0 0 74px}
+    .bubble:after{display:none}
+  }
+
+  /* float / blink 動畫 */
+  .floaty{animation:float 3.4s ease-in-out infinite}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+  .blink{animation:blink 4.2s infinite}
+  @keyframes blink{0%,94%,100%{transform:scaleY(1)}97%{transform:scaleY(.1)}}
+
+  /* 完成卡 */
+  .cert{
+    border:2px solid var(--gold);border-radius:16px;padding:26px 24px;margin-top:8px;text-align:center;
+    background:linear-gradient(170deg,#fffdf6,#fbf3df);position:relative;
+  }
+  .cert .seal{font-size:13px;letter-spacing:3px;color:var(--gold);font-weight:700}
+  .cert h3{font-size:22px;margin:8px 0 4px;color:var(--ink)}
+  .cert .gem{font-weight:800;color:var(--teal-deep);font-size:18px;margin:10px 0}
+  .cert .by{font-size:12px;color:var(--ink-soft);margin-top:14px}
+
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 4px;justify-content:center}
+  .chip{font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid var(--line);background:#fff;color:var(--ink-soft)}
+  .chip.on{border-color:var(--teal);background:var(--teal-wash);color:var(--teal-deep)}
+
+  .locknote{
+    margin-top:18px;border:1px dashed var(--line);border-radius:12px;padding:14px 16px;
+    font-size:13.5px;color:var(--ink-soft);background:#faf8f3;
+  }
+  .locknote b{color:var(--gold)}
+  ul.next{margin:6px 0 0 2px;list-style:none}
+  ul.next li{padding:7px 0 7px 26px;position:relative;font-size:15px}
+  ul.next li:before{content:"→";position:absolute;left:2px;color:var(--teal);font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand"><span class="dot"></span>Gem 設計闖關</div>
+    <button class="muteBtn" id="muteBtn" onclick="toggleMute()">🔊 音效開</button>
+  </div>
+
+  <div class="map" id="map"></div>
+
+  <div class="stage">
+    <div id="card" class="card"></div>
+
+    <div class="buddy">
+      <div class="panel">
+        <svg id="zhi" viewBox="0 0 120 120" aria-label="阿智陪跑師">
+          <g class="floaty">
+            <!-- 影子 -->
+            <ellipse cx="60" cy="111" rx="30" ry="5" fill="#0a5f57" opacity=".12"/>
+            <!-- 圓滾身體(胖橢圓) -->
+            <ellipse cx="60" cy="82" rx="32" ry="28" fill="#0f8a7e"/>
+            <ellipse cx="60" cy="82" rx="32" ry="28" fill="url(#g1)" opacity=".22"/>
+            <!-- 小短手 -->
+            <ellipse cx="30" cy="84" rx="7" ry="9" fill="#0d7d72"/>
+            <ellipse cx="90" cy="84" rx="7" ry="9" fill="#0d7d72"/>
+            <!-- 識別證 -->
+            <rect x="50" y="74" width="20" height="24" rx="4" fill="#ffffff"/>
+            <circle cx="60" cy="81" r="3.4" fill="#13a394"/>
+            <rect x="53" y="88" width="14" height="2.6" rx="1.3" fill="#0f8a7e"/>
+            <rect x="53" y="93" width="9" height="2.2" rx="1.1" fill="#aab4be"/>
+            <!-- 大圓頭 -->
+            <circle cx="60" cy="40" r="28" fill="#13a394"/>
+            <circle cx="60" cy="40" r="28" fill="url(#g1)" opacity=".20"/>
+            <!-- 頭頂嫩葉(成長) -->
+            <path d="M60 14 C53 2,43 4,43 4 C43 4,46 16,60 17 Z" fill="#1bbf9f"/>
+            <path d="M60 15 C67 3,77 5,77 5 C77 5,74 17,60 18 Z" fill="#15a98c"/>
+            <!-- 圓眼鏡(顧問感、不嚴肅) -->
+            <g stroke="#0a5f57" stroke-width="2.4" fill="#ffffff" fill-opacity=".25">
+              <circle cx="50" cy="41" r="9"/>
+              <circle cx="70" cy="41" r="9"/>
+            </g>
+            <path d="M59 41 h2" stroke="#0a5f57" stroke-width="2.4"/>
+            <!-- 圓圓大眼 -->
+            <g class="blink" style="transform-origin:center 41px">
+              <circle cx="50" cy="41" r="3.4" fill="#0a3b35"/>
+              <circle cx="70" cy="41" r="3.4" fill="#0a3b35"/>
+              <circle cx="51.3" cy="39.7" r="1.1" fill="#fff"/>
+              <circle cx="71.3" cy="39.7" r="1.1" fill="#fff"/>
+            </g>
+            <!-- 腮紅 -->
+            <ellipse cx="42" cy="50" rx="4" ry="2.6" fill="#ff9d8a" opacity=".5"/>
+            <ellipse cx="78" cy="50" rx="4" ry="2.6" fill="#ff9d8a" opacity=".5"/>
+            <!-- 微笑 -->
+            <path d="M53 52 Q60 58,67 52" stroke="#0a3b35" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+          </g>
+          <defs>
+            <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#0a5f57"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div class="name">阿智 陪跑師</div>
+        <div class="bubble" id="bubble">準備好了嗎?我們開始第一關。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ════════ 狀態 ════════ */
+let stage = 0;          // 0出場 1接案 2-5四要素 6動手 7完成
+let scenarioKey = null; // 選定情境
+let answered = false;
+let muted = false;
+let audioCtx = null, unlocked = false;
+
+/* ════════ 德育各單位專屬情境(7 教學科系 + 4 行政單位) ════════ */
+const scenarios = {
+  /* ── 教學科系 ── */
+  nursing:{
+    name:"OSCE 考站設計助手",
+    label:"護理系 ・ OSCE 考站設計",
+    pain:"每學期設計 OSCE 考站,要寫情境腳本、標準病人台詞、評核表,很花時間",
+    role:{full:"你是一位資深臨床護理教育者,熟悉 OSCE 客觀結構式臨床測驗的命題原則。",
+          short:"一位資深臨床護理教育者,熟悉 OSCE 命題原則"},
+    task:{full:"請依我給的臨床主題,設計一個 OSCE 考站,包含情境說明、標準病人腳本與評核重點。",
+          short:"依臨床主題設計 OSCE 考站,含情境、病人腳本與評核重點"},
+    rule:{full:"評核項目須對應護理過程;標準病人台詞要口語自然;不得出現超出學生程度的罕見診斷。",
+          short:"評核對應護理過程、台詞口語化、不超出學生程度"},
+    fmt:{full:"用三段輸出:一、情境說明;二、標準病人腳本(對話形式);三、評核表(項目+配分)。",
+         short:"分三段:情境說明、病人腳本、評核表"}
+  },
+  eldercare:{
+    name:"照護操作教學助手",
+    label:"高齡照顧福祉系 ・ 照服員/家屬指導",
+    pain:"教照服員與家屬照護技巧,要把步驟講清楚又不讓人緊張,常要重做教材",
+    role:{full:"你是一位有實務經驗的高齡照護教師,擅長把照護技巧教給沒有醫療背景的照服員與家屬。",
+          short:"一位高齡照護教師,擅長把照護技巧教給無醫療背景的人"},
+    task:{full:"請依我給的照護主題,寫一份給照服員或家屬的操作教學,讓他們照著就能做。",
+          short:"把照護主題寫成照服員/家屬照著就能做的操作教學"},
+    rule:{full:"每個步驟只放一個動作;會痛或有風險的地方要特別提醒;遇到狀況要寫清楚何時該通報。",
+          short:"一步一動作、標註風險與提醒、寫清楚何時通報"},
+    fmt:{full:"用編號步驟,每步一句;最後加一個「注意事項」小框。",
+         short:"編號步驟,每步一句,末尾加注意事項框"}
+  },
+  food:{
+    name:"營養衛教內容助手",
+    label:"食品保健系 ・ 食安/營養衛教",
+    pain:"做食品安全或營養衛教內容,要正確又好懂,還要破解網路謠言,很花時間查證",
+    role:{full:"你是一位食品營養專業教師,熟悉食品安全法規與營養學,能把專業知識講成大眾聽得懂的話。",
+          short:"一位食品營養專業教師,能把專業講成大眾懂的話"},
+    task:{full:"請依我給的食安或營養主題,寫一份給一般民眾看的衛教內容,並破解常見迷思。",
+          short:"把食安/營養主題寫成民眾看的衛教內容並破解迷思"},
+    rule:{full:"資訊須有依據,不確定要標明;不誇大療效;不嚇唬人;標示適用對象與份量。",
+          short:"有依據、不誇大療效、不嚇唬、標適用對象"},
+    fmt:{full:"用三段:一、正確觀念;二、常見迷思與澄清;三、實際怎麼做。",
+         short:"分三段:正確觀念、迷思澄清、實際做法"}
+  },
+  childcare:{
+    name:"教保活動設計助手",
+    label:"幼兒保育系 ・ 教保/親職活動設計",
+    pain:"設計教保或親職活動,要兼顧發展目標、安全、又要好玩,構思很花時間",
+    role:{full:"你是一位有現場經驗的幼兒教保員,熟悉幼兒發展階段與活動安全。",
+          short:"一位幼兒教保員,熟悉幼兒發展階段與活動安全"},
+    task:{full:"請依我給的年齡與主題,設計一個教保活動,包含目標、流程與所需材料。",
+          short:"依年齡與主題設計教保活動,含目標、流程與材料"},
+    rule:{full:"活動要符合該年齡發展;材料要安全無誤食風險;流程長度要適合幼兒專注力。",
+          short:"符合年齡發展、材料安全、長度合幼兒專注力"},
+    fmt:{full:"用三段:一、活動目標;二、進行流程(步驟);三、材料與安全提醒。",
+         short:"分三段:活動目標、進行流程、材料與安全提醒"}
+  },
+  culinary:{
+    name:"廚藝實作教學助手",
+    label:"餐旅廚藝管理系 ・ 實作/術科教學",
+    pain:"寫廚藝實作或證照術科的教學步驟,要讓學生看了就會,還要標清楚食安與火源安全",
+    role:{full:"你是一位餐旅廚藝技術講師,熟悉丙級/乙級術科標準,擅長把製程拆成學生跟得上的步驟。",
+          short:"一位餐旅廚藝技術講師,熟悉術科標準、擅長拆步驟"},
+    task:{full:"請依我給的菜色或品項,寫一份課堂實作教學,讓學生照著順序完成。",
+          short:"把菜色寫成學生照著順序完成的課堂實作教學"},
+    rule:{full:"每步標明火候與時間;食材衛生與用火安全處要特別標註;用詞貼合術科評分標準。",
+          short:"標火候與時間、標食安與用火安全、貼合術科標準"},
+    fmt:{full:"用編號步驟,每步含「動作+重點」;開頭列食材器具,結尾列常見失敗點。",
+         short:"編號步驟含動作+重點,開頭列食材器具、結尾列常見失敗"}
+  },
+  beauty:{
+    name:"技術示範流程助手",
+    label:"美容流行設計系 ・ 技術示範流程",
+    pain:"寫美容技術示範流程,要讓學生看步驟就懂,還要標清楚衛生與皮膚安全",
+    role:{full:"你是一位美容流行設計技術講師,擅長把手技流程拆解成學生跟得上的步驟。",
+          short:"一位美容技術講師,擅長把手技拆成好跟的步驟"},
+    task:{full:"請依我給的技術主題,寫一份課堂示範流程,讓學生照著順序練習。",
+          short:"把技術主題寫成學生照著練習的課堂示範流程"},
+    rule:{full:"每步標明手法重點;涉及衛生消毒或皮膚安全處要特別標註;用詞貼合術科考試標準。",
+          short:"標手法重點、標衛生與皮膚安全、貼合術科標準"},
+    fmt:{full:"用編號步驟,每步含「動作+重點」;開頭列器材,結尾列常見錯誤。",
+         short:"編號步驟含動作+重點,開頭列器材、結尾列常見錯誤"}
+  },
+  tourism:{
+    name:"遊程解說設計助手",
+    label:"觀光休閒與健康系 ・ 遊程/活動設計",
+    pain:"設計遊程或休閒活動,要排得順、有解說亮點、又顧到安全與不同客群,構思很花時間",
+    role:{full:"你是一位觀光休閒規劃教師,熟悉遊程設計與導覽解說,懂得照顧不同客群需求。",
+          short:"一位觀光休閒規劃教師,熟悉遊程設計與導覽解說"},
+    task:{full:"請依我給的地點與客群,設計一個半日或一日遊程,包含動線、解說亮點與時間安排。",
+          short:"依地點與客群設計遊程,含動線、解說亮點與時間"},
+    rule:{full:"動線要順、不走回頭路;每站要有解說亮點;要標註安全與替代方案(如雨天)。",
+          short:"動線順、每站有亮點、標安全與雨天備案"},
+    fmt:{full:"用時間軸:時段+地點+活動+解說重點;結尾附注意事項。",
+         short:"時間軸:時段+地點+活動+解說,結尾附注意事項"}
+  },
+  /* ── 行政單位(用真實業務出題) ── */
+  liberal:{
+    name:"共同科教學助手",
+    label:"通識中心 ・ 共同科教學設計",
+    pain:"通識課學生科系背景超混雜,要把抽象主題講得各科系都有感,設計討論題很燒腦",
+    role:{full:"你是一位通識教育教師,擅長把跨領域主題講得不同科系學生都聽得懂、願意參與。",
+          short:"一位通識教師,擅長把跨領域主題講得人人有感"},
+    task:{full:"請依我給的通識主題,設計一段課堂內容,包含切入點、討論問題與延伸活動。",
+          short:"依通識主題設計課堂內容,含切入點、討論題與延伸活動"},
+    rule:{full:"舉例要連到學生科系與生活;討論題要開放沒有標準答案;不預設學生有專業背景。",
+          short:"例子連到學生生活、討論題開放、不預設專業背景"},
+    fmt:{full:"用三段:一、開場切入;二、討論問題(三題);三、延伸活動。",
+         short:"分三段:開場切入、討論問題、延伸活動"}
+  },
+  admission:{
+    name:"招生文案助手",
+    label:"招生組 ・ 招生宣傳文案",
+    pain:"寫招生貼文與簡介,要打中考生跟家長、講清楚特色又不能像在喊口號,很難拿捏",
+    role:{full:"你是一位熟悉技職招生的文案企劃,懂得用考生與家長在意的點來介紹科系。",
+          short:"一位技職招生文案企劃,懂用考生家長在意的點介紹"},
+    task:{full:"請依我給的科系特色與對象,寫一則招生宣傳文案。",
+          short:"依科系特色與對象,寫一則招生宣傳文案"},
+    rule:{full:"講具體出路與證照,不喊空泛口號;語氣親切不誇大;符合招生簡章可查證的內容。",
+          short:"講具體出路、不喊口號、不誇大、可查證"},
+    fmt:{full:"用三段:一、一句抓住注意的開頭;二、三個具體亮點;三、行動呼籲與報名資訊。",
+         short:"分三段:吸睛開頭、三個亮點、報名行動呼籲"}
+  },
+  intl:{
+    name:"雙語通知助手",
+    label:"國際處 ・ 雙語公告/通知",
+    pain:"發給外籍生的雙語公告,要中英都通順、語氣得體、又要把規定講清楚,很耗時",
+    role:{full:"你是一位大學國際處承辦人,擅長寫給外籍學生看的中英雙語公告,語氣得體清楚。",
+          short:"一位國際處承辦人,擅長寫得體清楚的中英雙語公告"},
+    task:{full:"請依我給的事項,寫一則給外籍學生的中英雙語通知。",
+          short:"依事項寫一則給外籍生的中英雙語通知"},
+    rule:{full:"中英文意思要一致;用詞正式但好懂;重要日期與地點要醒目;避免只有本地人懂的縮寫。",
+          short:"中英一致、正式好懂、日期醒目、避免在地縮寫"},
+    fmt:{full:"上半中文、下半英文;各自用:主旨、內容、需要行動的事項三段。",
+         short:"上中下英,各分主旨、內容、需行動事項"}
+  },
+  library:{
+    name:"資源指引助手",
+    label:"圖資中心 ・ 資源使用指引",
+    pain:"寫資料庫或系統的使用說明,要讓不熟科技的師生照著就會用,常常寫得太專業沒人看懂",
+    role:{full:"你是一位圖書資訊館員,擅長把系統與資料庫的操作,寫成師生照著就能上手的說明。",
+          short:"一位圖資館員,擅長把操作寫成師生照著就會的說明"},
+    task:{full:"請依我給的系統或資料庫,寫一份給師生的使用指引。",
+          short:"依系統或資料庫,寫一份給師生的使用指引"},
+    rule:{full:"每步只做一件事;少用技術術語,必要時加解釋;遇到容易卡關的地方要附提醒。",
+          short:"一步一事、少術語加解釋、卡關處附提醒"},
+    fmt:{full:"用編號步驟,每步配一句說明;結尾加「常見問題」三則。",
+         short:"編號步驟配說明,結尾加常見問題三則"}
+  }
+};
+const elemMeta = {
+  role:{name:"角色",cls:"role",color:"#2f6fb0",
+        say:"角色就像給 AI 貼上識別證 ── 先講清楚「它是誰」,語氣與專業度才會穩。"},
+  task:{name:"任務",cls:"task",color:"#0f8a7e",
+        say:"任務是這個 Gem 的本職工作 ── 它每天上工要做的那件事。"},
+  rule:{name:"規則",cls:"rule",color:"#c98a1e",
+        say:"規則是你的紅線與眉角 ── 安全、正確、分寸、不能犯的錯,都靠它把關。"},
+  fmt:{name:"輸出格式",cls:"fmt",color:"#c0556a",
+       say:"輸出格式是交件模板 ── 規定它把成果長成你好用的樣子。"}
+};
+const elemOrder = ["role","task","rule","fmt"];
+
+/* ════════ 音效(Web Audio,零音檔) ════════ */
+function ensureAudio(){
+  if(!audioCtx){try{audioCtx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}}
+  if(audioCtx&&!unlocked){const b=audioCtx.createBuffer(1,1,22050);const s=audioCtx.createBufferSource();s.buffer=b;s.connect(audioCtx.destination);s.start(0);unlocked=true;}
+}
+function beep(freqs,dur=0.12,type="sine",vol=0.14){
+  if(muted||!audioCtx)return;
+  freqs.forEach((f,i)=>{
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type=type;o.frequency.value=f;
+    const t=audioCtx.currentTime+i*0.09;
+    g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g);g.connect(audioCtx.destination);o.start(t);o.stop(t+dur+0.02);
+  });
+}
+const sfx={
+  ok:()=>beep([587,784],0.16),
+  pick:()=>beep([523],0.09),
+  next:()=>beep([440,660],0.12),
+  copy:()=>beep([659,880],0.13),
+  finish:()=>beep([523,659,784,1047],0.2),
+  start:()=>beep([392,523,659],0.16)
+};
+function toggleMute(){
+  muted=!muted;
+  document.getElementById('muteBtn').textContent = muted?"🔇 音效關":"🔊 音效開";
+  if(!muted){ensureAudio();sfx.pick();}
+}
+
+/* ════════ 阿智對話 ════════ */
+function say(t){document.getElementById('bubble').textContent=t;}
+
+/* ════════ 關卡地圖 ════════ */
+const mapNodes=[
+  {k:1,label:"接案"},
+  {k:2,label:"角色"},
+  {k:3,label:"任務"},
+  {k:4,label:"規則"},
+  {k:5,label:"格式"},
+  {k:6,label:"組裝"},
+  {k:7,label:"完成"},
+  {k:99,label:"進階",bonus:true}
+];
+function renderMap(){
+  const m=document.getElementById('map');
+  m.innerHTML=mapNodes.map((n,i)=>{
+    let st="locked";
+    if(n.bonus) st="bonus locked";
+    else if(stage>n.k) st="done";
+    else if(stage===n.k) st="active";
+    const pip = (stage>n.k&&!n.bonus)?"✓":(n.bonus?"★":n.k);
+    const arr = i<mapNodes.length-1?'<span class="arr">›</span>':'';
+    return `<div class="node ${st}"><span class="pip">${pip}</span>${n.label}</div>${arr}`;
+  }).join('');
+}
+
+/* ════════ 渲染分流 ════════ */
+const card=()=>document.getElementById('card');
+function render(){
+  renderMap();
+  answered=false;
+  if(stage===0) return renderIntro();
+  if(stage===1) return renderIntake();
+  if(stage>=2&&stage<=5) return renderElement(elemOrder[stage-2]);
+  if(stage===6) return renderBuilder();
+  if(stage===7) return renderGraduate();
+}
+
+/* ── 出場 ── */
+function renderIntro(){
+  say("我是阿智,你的 Gem 陪跑員。跟著走一輪,我們一起把一個能用的小幫手做出來。");
+  card().innerHTML=`
+    <div class="eyebrow eyebrow-intro">讓 Gem 接手 ・ 不用再做第二次</div>
+    <h1 class="hero">那些年,<br>我們一直重複做的事</h1>
+    <p class="lead">出考題、批報告、寫通知、做衛教…有些事,你已經做過上百遍了。今天起,挑一件交給你自己做的 Gem ── 設定一次,以後它接手。</p>
+    <div class="brief">
+      <div class="brief-t">陪跑師會陪你做的三件事</div>
+      <ol class="brief-list">
+        <li>從你的工作痛點接案,鎖定情境</li>
+        <li>拆解 Gem 的四個設計要素</li>
+        <li>親手組裝出你的專屬 Gem,完成上線</li>
+      </ol>
+    </div>
+    <p class="hint">進階技巧關(★)會在你完成後解鎖。</p>
+    <div class="row">
+      <button class="btn primary" onclick="go(1)">接下第一個任務 →</button>
+    </div>`;
+}
+
+/* ── 第一關 接案 ── */
+function renderIntake(){
+  say("先別急著寫提示詞。挑一件你最想交給 AI 分擔的事 ── 我們整輪就拿它來練。");
+  const teachKeys=["nursing","eldercare","food","childcare","culinary","beauty","tourism"];
+  const adminKeys=["liberal","admission","intl","library"];
+  const mkOpt=k=>{const s=scenarios[k];return `
+    <button class="opt" data-k="${k}" onclick="pickScenario('${k}',this)">
+      <span class="tick">✓</span>
+      <span><b>${s.label}</b><br><span class="hint">${s.pain}</span></span>
+    </button>`;};
+  const group=(title,keys)=>`
+    <div class="grp">${title}</div>
+    <div class="opts">${keys.map(mkOpt).join('')}</div>`;
+  card().innerHTML=`
+    <div class="eyebrow"><span class="lv">第 1 關</span> 接案 ・ 鎖定你的情境</div>
+    <h2>哪一件事,最值得做成一個 Gem?</h2>
+    <p class="lead">選一個你最有感的工作場景。接下來每一關的題目,都會用你選的這個情境出題 ── 你練的就是自己的需求。</p>
+    ${group('教學科系',teachKeys)}
+    ${group('行政單位',adminKeys)}
+    <div class="feed" id="feed"></div>
+    <div class="row">
+      <button class="btn back" onclick="back()">← 上一步</button>
+      <button class="btn primary" id="nextBtn" disabled onclick="go(2)">確認接案,進入拆解 →</button>
+    </div>`;
+}
+function pickScenario(k,el){
+  ensureAudio();sfx.pick();
+  scenarioKey=k;
+  document.querySelectorAll('.opt').forEach(o=>o.classList.remove('sel'));
+  el.classList.add('sel');
+  const s=scenarios[k];
+  const f=document.getElementById('feed');
+  f.className="feed ok show";
+  f.innerHTML=`<b>接案成功:${s.name}</b>等一下你會發現,它其實就是把你心裡那套「要交代清楚」的東西,拆成四塊講給 AI 聽。`;
+  document.getElementById('nextBtn').disabled=false;
+  say("好選擇。這個情境我熟,跟著我把它一塊一塊拆開。");
+}
+
+/* ── 第 2-5 關 辨識(修復型・純敘述) ── */
+// 把四要素串成一段自然提示詞;缺的那塊整段不寫,讓老師讀出「少了什麼」
+function narrate(s,missing){
+  const sentences={
+    role: s.role.short + "。",
+    task: "請它依我給的內容," + s.task.short + "。",
+    rule: "要注意：" + s.rule.short + "。",
+    fmt:  "輸出時," + s.fmt.short + "。"
+  };
+  return elemOrder.filter(k=>k!==missing).map(k=>sentences[k]).join("");
+}
+function renderElement(key){
+  const s=scenarios[scenarioKey];
+  const meta=elemMeta[key];
+  const lvNum=elemOrder.indexOf(key)+2;
+  say(`第 ${lvNum-1} 關。讀讀下面這段話,想想它少交代了什麼。`);
+
+  const badText = narrate(s, key);
+
+  // 四選一:選出「這段缺的是哪個要素」
+  const opts=elemOrder.map(k=>{
+    const m=elemMeta[k];
+    return `<button class="opt" data-k="${k}" onclick="answerElem('${key}','${k}',this)">
+      <span class="tick">✓</span><span>它沒交代<b>${m.name}</b></span>
+      <span class="tag ${m.cls}">${m.name}</span></button>`;
+  }).join('');
+
+  card().innerHTML=`
+    <div class="eyebrow"><span class="lv">第 ${lvNum-1} 關</span> 拆解四要素</div>
+    <h2>這段交代,漏了一塊</h2>
+    <p class="lead">下面是一位老師想交給 AI 做的事,用一段話講出來。但他漏講了四要素中的一個 ── 找出他沒交代到的那塊。真實工作裡,你多半是在補別人(或自己)沒講清楚的地方。</p>
+    <div class="badprompt"><span class="lbl">一段沒講全的交代</span>${badText}</div>
+    <div class="opts">${opts}</div>
+    <div class="feed" id="feed"></div>
+    <div class="row">
+      <button class="btn back" onclick="back()">← 上一步</button>
+      <button class="btn primary" id="nextBtn" disabled onclick="go(${stage+1})">${stage===5?'四塊到齊,進場組裝 →':'下一塊 →'}</button>
+    </div>`;
+}
+function answerElem(correct,chosen,el){
+  if(answered)return;
+  answered=true;ensureAudio();
+  const meta=elemMeta[correct];
+  document.querySelectorAll('.opt').forEach(o=>{
+    o.classList.add('disabled');
+    if(o.dataset.k===correct)o.classList.add('correct');
+    else if(o.dataset.k===chosen)o.classList.add('wrong');
+  });
+  const f=document.getElementById('feed');
+  if(chosen===correct){
+    sfx.ok();
+    f.className="feed ok show";
+    f.innerHTML=`<b>對,缺的就是${meta.name}</b>${meta.say}`;
+    say("準了。記住這種感覺,以後一眼就看出提示詞哪裡虛。");
+  }else{
+    f.className="feed no show";
+    f.innerHTML=`<b>再看一眼 ── 缺的其實是${meta.name}</b>${meta.say}你選的那塊,這段其實有寫到。`;
+    say("沒關係,辨識本來就要練。看一下正解標綠的那塊。");
+  }
+  document.getElementById('nextBtn').disabled=false;
+}
+
+/* ── 第 6 關 組裝 ── */
+function renderBuilder(){
+  const s=scenarios[scenarioKey];
+  say("四塊都認得了。現在把你自己的版本填進去 ── 我先幫你墊好範例,照著改成你要的。");
+  const f=(k,labelColor,ph)=>`
+    <div class="field">
+      <label><span class="c" style="background:${elemMeta[k].color}"></span>${elemMeta[k].name}</label>
+      <textarea id="in_${k}" oninput="compose()" placeholder="${ph}">${s[k].full}</textarea>
+    </div>`;
+  card().innerHTML=`
+    <div class="eyebrow"><span class="lv">第 6 關</span> 親手組裝 ・ ${s.name}</div>
+    <h2>把四塊填成你的 Gem</h2>
+    <p class="lead">我已用「${s.label}」的範例墊底。改成貼合你單位、你習慣的講法 ── 這就是你 Gem 的系統提示詞。</p>
+    ${f('role')}${f('task')}${f('rule')}${f('fmt')}
+    <h2 style="font-size:17px;margin:22px 0 8px">組裝結果</h2>
+    <div class="result" id="result"></div>
+    <div class="row">
+      <button class="btn primary" id="copyBtn" onclick="copyPrompt()">📋 一鍵複製提示詞</button>
+      <button class="btn gold" onclick="go(7)">完成,看成果 →</button>
+    </div>
+    <div class="hint" style="margin-top:10px">複製後到 Gemini 點「建立 Gem / 寶石」,貼進系統指示欄即可。</div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn back" onclick="back()">← 上一步</button>
+    </div>`;
+  compose();
+}
+function compose(){
+  const get=k=>{const v=document.getElementById('in_'+k);return v?v.value.trim():'';};
+  const map={role:'角色',task:'任務',rule:'規則',fmt:'輸出格式'};
+  let out='';
+  elemOrder.forEach(k=>{
+    const v=get(k);
+    out+=`【${map[k]}】${v||'<span class="ph">(尚未填寫…)</span>'}\n`;
+  });
+  document.getElementById('result').innerHTML=out.trim();
+}
+function copyPrompt(){
+  const get=k=>{const v=document.getElementById('in_'+k);return v?v.value.trim():'';};
+  const map={role:'角色',task:'任務',rule:'規則',fmt:'輸出格式'};
+  const txt=elemOrder.map(k=>`【${map[k]}】${get(k)}`).join('\n');
+  const btn=document.getElementById('copyBtn');
+  const done=()=>{
+    ensureAudio();sfx.copy();say("複製好了!貼進 Gemini 的 Gem 系統指示欄,馬上能試跑。");
+    if(btn){const t=btn.textContent;btn.textContent="✓ 已複製到剪貼簿";btn.classList.add('copied');
+      setTimeout(()=>{btn.textContent=t;btn.classList.remove('copied');},1800);}
+  };
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(()=>fallbackCopy(txt,done));
+  }else{fallbackCopy(txt,done);}
+}
+function fallbackCopy(txt,done){
+  const ta=document.createElement('textarea');ta.value=txt;
+  ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);
+  ta.select();try{document.execCommand('copy');done();}catch(e){}
+  document.body.removeChild(ta);
+}
+
+/* ── 第 7 關 完成 ── */
+function renderGraduate(){
+  ensureAudio();sfx.finish();
+  const s=scenarios[scenarioKey];
+  say("做出來了!這個 Gem 是你自己的。回去丟幾個真實情境試跑,不順就回來改規則 ── 邊用邊調,它會越來越順手。");
+  card().innerHTML=`
+    <div class="eyebrow eyebrow-intro">你的第一個 Gem ・ 完成</div>
+    <div class="cert">
+      <div class="seal">阿智陪你一起完成</div>
+      <h3>做出來了 🎉</h3>
+      <div class="hint">這是一個你可以直接拿去用的 Gem</div>
+      <div class="gem">「${s.name}」</div>
+      <div class="chips">
+        <span class="chip on">角色</span><span class="chip on">任務</span>
+        <span class="chip on">規則</span><span class="chip on">輸出格式</span>
+      </div>
+    </div>
+
+    <h2 style="font-size:18px;margin:24px 0 6px">回去後的三步</h2>
+    <ul class="next">
+      <li>貼進 Gemini 建一個 Gem,丟一個真實情境試跑一次。</li>
+      <li>不滿意?回頭改「規則」那塊最有效 ── 多數問題出在沒立規矩。</li>
+      <li>同一套流程,你工作裡其他重複的事,都能各做一個專用 Gem。</li>
+    </ul>
+
+    <div class="locknote">
+      <b>★ 進階關已解鎖(pilot 預告)</b><br>
+      正式版這裡會開放三項高手技巧:<b>少量範例</b>(給 Gem 看理想答案長怎樣)、<b>知識庫</b>(把講義或資料餵進去當依據)、<b>防幻覺約束</b>(要它標不確定、不亂編)。本次 pilot 先測核心線,進階關之後補上。
+    </div>
+
+    <div class="row">
+      <button class="btn ghost" onclick="restart()">↻ 換個情境再做一個</button>
+      <button class="btn gold" onclick="say('正式版這裡會讓你下載這張完成卡圖檔 ✨')">下載完成卡(正式版)</button>
+    </div>`;
+}
+
+function go(n){ensureAudio();sfx.next();stage=n;window.scrollTo({top:0,behavior:'smooth'});render();}
+function back(){if(stage>1){ensureAudio();sfx.pick();stage--;window.scrollTo({top:0,behavior:'smooth'});render();}}
+function restart(){scenarioKey=null;stage=1;sfx.start();window.scrollTo({top:0,behavior:'smooth'});render();}
+
+/* init */
+render();
+</script>
+</body>
+</html>
